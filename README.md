@@ -1,3 +1,6 @@
+
+---
+
 # 🚀 FoNotify
 
 > **FoNotify = Fire Once, Notify Once**
@@ -7,38 +10,116 @@ A minimal, ultra-lightweight real-time notification system.
 No queues. No storage. No retries.
 Just one simple rule:
 
-> **If client is connected → notify
-> If not → forget**
+> **If client is connected → notify**
+> **If not → forget**
 
 ---
 
 ## 📦 NPM
 
-[![npm version](https://img.shields.io/npm/v/fonotify.svg)](https://www.npmjs.com/package/fonotify)
-[![npm downloads](https://img.shields.io/npm/dw/fonotify.svg)](https://www.npmjs.com/package/fonotify)
-[![license](https://img.shields.io/npm/l/fonotify.svg)](./LICENSE)
+[https://www.npmjs.com/package/fonotify](https://www.npmjs.com/package/fonotify)
+
+---
+
+## ❓ Why FoNotify Exists
+
+Most real-time systems today are **over-engineered**.
+
+To send a simple update, developers often introduce:
+
+* WebSockets
+* Message queues (Kafka, RabbitMQ)
+* Retry systems
+* Persistent storage layers
+
+But many applications don’t need all that.
+
+---
+
+### 🔴 The Real Problem
+
+In most apps, the requirement is simple:
+
+> “Something changed → notify client → client refreshes data”
+
+Yet solving this often leads to **complex infrastructure, higher cost, and maintenance overhead**.
+
+---
+
+## ✅ The FoNotify Approach
+
+FoNotify does **one thing only**:
+
+> **Send a signal, not data**
+
+```txt
+Server → notify(userId) → Client → fetch latest data
+```
+
+FoNotify **does not transfer data**, it only tells the client:
+
+> “Hey, something changed. You decide what to do.”
+
+---
+
+## 🧠 Core Philosophy
+
+FoNotify is designed for systems where:
+
+* You **don’t need guaranteed delivery**
+* You only care about **active/connected users**
+* You want **zero infrastructure overhead**
+* You prefer **stateless architecture**
 
 ---
 
 ## ✨ Features
 
-* Real-time notifications
+* Real-time notifications (instant)
 * Zero memory (no storage, no queue)
 * Fire-and-forget architecture
-* Works with **Express**, **Fastify**, **Hono**
-* Built-in client SDK
-* Extremely lightweight
-* Plug & play
+* Works with:
+
+  * Express
+  * Fastify
+  * Hono
+* Built-in lightweight client SDK
+* Plug & play integration
+* Optional Redis support for scaling
+* Extremely low memory footprint
 
 ---
 
-## 🧠 Philosophy
+## 🔄 How It Works
 
-FoNotify is designed for **pure notification systems**, where:
+```txt
+Client connects
+        ↓
+Server triggers event
+        ↓
+notify(userId)
+        ↓
+If connected → notify
+If not → ignore
+```
 
-* You don’t need delivery guarantees
-* You only care about active users
-* You want minimum infrastructure cost
+---
+
+## ⚡ Real Flow (Production Pattern)
+
+```txt
+Webhook / DB Change
+        ↓
+Server logic
+        ↓
+notify(userId)
+        ↓
+Client receives signal
+        ↓
+Client calls API (GET /data)
+        ↓
+UI updates
+```
 
 ---
 
@@ -50,13 +131,11 @@ npm install fonotify
 
 ---
 
-## 🚀 Usage
+## 🚀 Backend Usage
 
 ---
 
-### 🔥 Backend Setup
-
-#### Express
+### Express
 
 ```js
 import express from "express";
@@ -67,10 +146,7 @@ const app = express();
 initFoNotify(app);
 
 app.post("/update/:userId", (req, res) => {
-  const { userId } = req.params;
-
-  notify(userId);
-
+  notify(req.params.userId);
   res.json({ success: true });
 });
 
@@ -79,7 +155,7 @@ app.listen(4000);
 
 ---
 
-#### Fastify
+### Fastify
 
 ```js
 import Fastify from "fastify";
@@ -90,10 +166,7 @@ const app = Fastify();
 initFoNotify(app);
 
 app.post("/update/:userId", async (req) => {
-  const { userId } = req.params;
-
-  notify(userId);
-
+  notify(req.params.userId);
   return { success: true };
 });
 
@@ -102,7 +175,7 @@ app.listen({ port: 4000 });
 
 ---
 
-#### Hono
+### Hono
 
 ```js
 import { Hono } from "hono";
@@ -113,10 +186,7 @@ const app = new Hono();
 initFoNotify(app);
 
 app.post("/update/:userId", (c) => {
-  const userId = c.req.param("userId");
-
-  notify(userId);
-
+  notify(c.req.param("userId"));
   return c.json({ success: true });
 });
 
@@ -132,8 +202,10 @@ import { useEffect } from "react";
 import { subscribe } from "fonotify";
 
 useEffect(() => {
-  const sub = subscribe("localhost:4000", "user-123", () => {
-    console.log("update received");
+  const sub = subscribe("http://localhost:4000", "user-123", async () => {
+    const res = await fetch("/api/data");
+    const data = await res.json();
+    console.log(data);
   });
 
   return () => {
@@ -148,14 +220,17 @@ useEffect(() => {
 
 ---
 
-### `initFoNotify(app)`
+### `initFoNotify(app, redisUrl?)`
 
 ```js
 initFoNotify(app);
+initFoNotify(app, "redis://localhost:6379");
 ```
 
-* Supports: Express, Fastify, Hono
+* Initializes FoNotify on your server
 * Must be called once
+* Supports Express, Fastify, Hono
+* Optional Redis URL enables multi-instance scaling
 
 ---
 
@@ -165,8 +240,9 @@ initFoNotify(app);
 notify("user-123");
 ```
 
-* Sends `{ update: true }`
-* No-op if no client is connected
+* Sends `{ update: true }` signal
+* If no client is connected → does nothing
+* No retries, no storage
 
 ---
 
@@ -178,20 +254,33 @@ subscribe("http://localhost:4000", "user-123", () => {
 });
 ```
 
+* Opens a live connection
+* Triggers handler when notified
+* Returns a subscription object with `.close()`
+
 ---
 
-## 🔄 How It Works
+## ⚡ Redis Support (Horizontal Scaling)
+
+FoNotify works out of the box in **single-instance mode**.
+
+To scale across multiple servers:
+
+```js
+initFoNotify(app, "redis://localhost:6379");
+```
+
+### How it works:
 
 ```txt
-Client connects
-        ↓
-Server triggers update
-        ↓
-notify(userId)
-        ↓
-If connected → notify
-If not → ignore
+Server 1 ─┐
+          ├── Redis Pub/Sub ──► All servers ──► Clients
+Server 2 ─┘
 ```
+
+* Notifications are broadcast across instances
+* Clients connected to any server receive updates
+* Still stateless (no persistence)
 
 ---
 
@@ -201,18 +290,45 @@ If not → ignore
 | ---------------- | -------------------- |
 | Client connected | Instant notification |
 | Client offline   | Ignored              |
-| Multiple notify  | Live only            |
+| Multiple notify  | Only live delivery   |
 | Message storage  | None                 |
 | Retry mechanism  | None                 |
+
+---
+
+## 🆚 Comparison
+
+| Feature        | FoNotify | WebSockets | Polling |
+| -------------- | -------- | ---------- | ------- |
+| Complexity     | Low      | High       | Low     |
+| Memory usage   | Low      | High       | High    |
+| Infrastructure | Minimal  | Heavy      | Minimal |
+| Use case       | Signals  | Streams    | Basic   |
+
+---
+
+## 🎯 When to Use FoNotify
+
+Ideal for:
+
+* Dashboards
+* Admin panels
+* Notification systems
+* Webhook-driven updates
+* Stateless APIs
+* “Data changed → refresh UI” flows
 
 ---
 
 ## ⚠️ Limitations
 
 * No persistence
-* No delivery guarantee
-* Not suitable for critical systems
-* Single-instance (in-memory)
+* No delivery guarantees
+* Not suitable for:
+
+  * Chat apps
+  * Streaming systems
+  * Financial/critical systems
 
 ---
 
@@ -226,10 +342,17 @@ MIT License © Manoj Gowda
 
 **Manoj Gowda B R**
 
-* Full Stack Developer and Devops 
+* Full Stack Developer & DevOps
 * Focused on lightweight, scalable systems
 
-🌐 Website: https://manojgowda.in
-💻 GitHub: https://manojgowda.in/github
+🌐 [https://manojgowda.in](https://manojgowda.in)
+💻 [https://manojgowda.in/github](https://manojgowda.in/github)
+
+---
+
+## 💡 Final Thought
+
+> Don’t send data.
+> **Send signals. Let your APIs handle the rest.**
 
 ---

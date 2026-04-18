@@ -4,6 +4,8 @@
  * Backend + Client SDK
  */
 
+import Redis from "ioredis";
+
 type ClientRes = {
   write: (msg: string) => void;
 };
@@ -12,17 +14,47 @@ const topics: Map<string, Set<ClientRes>> = new Map();
 
 let initialized = false;
 
+let redisPub: Redis | null = null;
+let redisSub: Redis | null = null;
+
 /* =========================
    🔥 NOTIFY (GLOBAL)
 ========================= */
 
 export function notify(topic: string): void {
+  // 🔴 Redis mode
+  if (redisPub) {
+    redisPub.publish("fono", topic);
+    return;
+  }
+
+  // 🟢 Local mode
   const clients = topics.get(topic);
   if (!clients || clients.size === 0) return;
 
   const msg = `data: ${JSON.stringify({ update: true })}\n\n`;
 
   clients.forEach((res) => res.write(msg));
+}
+
+/* =========================
+   📡 REDIS SUBSCRIBER
+========================= */
+
+function setupRedis(redisUrl: string) {
+  redisPub = new Redis(redisUrl);
+  redisSub = new Redis(redisUrl);
+
+  redisSub.subscribe("fono");
+
+  redisSub.on("message", (_channel, topic) => {
+    const clients = topics.get(topic);
+    if (!clients || clients.size === 0) return;
+
+    const msg = `data: ${JSON.stringify({ update: true })}\n\n`;
+
+    clients.forEach((res) => res.write(msg));
+  });
 }
 
 /* =========================
@@ -109,8 +141,13 @@ function attachHono(app: any) {
    🚀 INIT
 ========================= */
 
-export function initFoNotify(app: any) {
+export function initFoNotify(app: any, redisUrl?: string) {
   if (initialized) return;
+
+  // 🔴 Auto Redis setup if URL provided
+  if (redisUrl) {
+    setupRedis(redisUrl);
+  }
 
   if (app?.use && app?.get) attachExpress(app);
   else if (app?.route && app?.get) attachFastify(app);
