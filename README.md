@@ -129,6 +129,16 @@ UI updates
 npm install fonotify
 ```
 
+Install only what your target needs:
+
+```bash
+# Server with Redis scaling (optional)
+npm install ioredis
+
+# React Native client
+npm install react-native-sse
+```
+
 ---
 
 ## 🚀 Backend Usage
@@ -197,9 +207,11 @@ export default app;
 
 ## 🌐 Frontend Usage
 
+### Web (Browser)
+
 ```js
 import { useEffect } from "react";
-import { subscribe } from "fonotify";
+import { subscribe } from "fonotify/web";
 
 useEffect(() => {
   const sub = subscribe("http://localhost:4000", "user-123", async () => {
@@ -212,6 +224,25 @@ useEffect(() => {
     sub.close();
   };
 }, []);
+```
+
+### React Native
+
+```js
+import { subscribe } from "fonotify/app";
+
+const sub = subscribe("http://localhost:4000", "user-123", () => {
+  console.log("update received");
+});
+
+// cleanup
+sub.close();
+```
+
+Install RN SSE package in your React Native app:
+
+```bash
+npm install react-native-sse
 ```
 
 ---
@@ -231,6 +262,7 @@ initFoNotify(app, "redis://localhost:6379");
 * Must be called once
 * Supports Express, Fastify, Hono
 * Optional Redis URL enables multi-instance scaling
+* If you pass a Redis URL, install `ioredis` in your server project
 
 ---
 
